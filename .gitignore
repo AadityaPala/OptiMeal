@@ -1,0 +1,125 @@
+# =============================================================================
+# Python / Backend
+# =============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Distribution / packaging
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+MANIFEST
+.eggs/
+
+# Virtual environments (uv, venv, poetry, pipenv)
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+# uv.lock is intentionally committed for reproducibility – do NOT ignore it
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# mypy / pyright type cache
+.mypy_cache/
+.pyright/
+pyrightconfig.json
+
+# =============================================================================
+# Node / Frontend (Next.js)
+# =============================================================================
+
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies — no leading slash so this matches in any subdirectory
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Next.js build output — no leading slash so optimeal-frontend/.next/ is caught
+.next/
+out/
+
+# Production build
+build/
+
+# Testing
+coverage/
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# =============================================================================
+# Environment & secrets — never commit these
+# =============================================================================
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
+
+# =============================================================================
+# OS & editor artefacts
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+
+# VS Code (workspace settings are personal; keep extensions.json if you share)
+.vscode/*
+!.vscode/extensions.json
+
+# =============================================================================
+# Logs & debug
+# =============================================================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
