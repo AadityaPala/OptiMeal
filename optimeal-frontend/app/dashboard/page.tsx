@@ -5,8 +5,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Loader2, Trash2 } from "lucide-react";
 
-import { fetchAPI, API_BASE_URL } from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,10 +17,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +34,7 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
 interface Menu {
   id: string;
   location_name: string;
@@ -41,45 +42,11 @@ interface Menu {
   created_at: string;
 }
 
-export interface DailyMacros {
-  calories: { consumed: number; target: number };
-  protein: { consumed: number; target: number };
-  carbs: { consumed: number; target: number };
-  fats: { consumed: number; target: number };
+interface RoutineAnalysis {
+  lacking: string[];
+  excess: string[];
+  summary: string;
 }
-
-export interface BudgetSummary {
-  spentToday: number;
-  remainingBudget: number;
-}
-
-export interface PreferenceInsight {
-  id: string;
-  text: string;
-}
-
-const mockDailyMacros: DailyMacros = {
-  calories: { consumed: 1500, target: 2000 },
-  protein: { consumed: 90, target: 120 },
-  carbs: { consumed: 160, target: 220 },
-  fats: { consumed: 45, target: 70 },
-};
-
-const mockBudget: BudgetSummary = {
-  spentToday: 12.5,
-  remainingBudget: 7.5,
-};
-
-const mockInsights: PreferenceInsight[] = [
-  {
-    id: "fiber",
-    text: "You are currently 10g under your average daily fiber intake.",
-  },
-  {
-    id: "protein",
-    text: "You consistently hit your protein goal on days you eat before 10am.",
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Menus list section
@@ -156,11 +123,11 @@ function MenusSection({ userId }: { userId: string }) {
                   {menu.location_name}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {format(new Date(menu.created_at), "MMM d, yyyy \u00B7 h:mm a")}
+                  {format(new Date(menu.created_at), "MMM d, yyyy  h:mm a")}
                 </p>
               </div>
               <Badge variant="outline" className="ml-3 shrink-0 text-xs">
-                View {"\u2192"}
+                View 
               </Badge>
             </button>
             <Button
@@ -201,7 +168,7 @@ function MenusSection({ userId }: { userId: string }) {
               onClick={handleDelete}
               disabled={!!deletingId}
             >
-              {deletingId ? "Deleting\u2026" : "Delete"}
+              {deletingId ? "Deleting" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -211,25 +178,134 @@ function MenusSection({ userId }: { userId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Analysis results display
+// ---------------------------------------------------------------------------
+function AnalysisResults({
+  analysis,
+  onUpdate,
+}: {
+  analysis: RoutineAnalysis;
+  onUpdate: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      {/* Summary */}
+      <p className="text-sm leading-relaxed text-foreground">{analysis.summary}</p>
+
+      {/* Lacking */}
+      {analysis.lacking.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Needs More Of
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {analysis.lacking.map((item, i) => (
+              <Badge
+                key={i}
+                className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900/40 dark:text-yellow-300"
+              >
+                {item}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Excess */}
+      {analysis.excess.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Watch Out For
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {analysis.excess.map((item, i) => (
+              <Badge key={i} variant="destructive">
+                {item}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Button variant="outline" size="sm" onClick={onUpdate}>
+        Update Routine
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 export default function DashboardPage() {
   const router = useRouter();
-  const macros = mockDailyMacros;
-  const budget = mockBudget;
 
   const [userId, setUserId] = React.useState<string | null>(null);
 
+  // Routine analysis state
+  const [routineText, setRoutineText] = React.useState("");
+  const [analysis, setAnalysis] = React.useState<RoutineAnalysis | null>(null);
+  const [showTextarea, setShowTextarea] = React.useState(true);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [loadingAnalysis, setLoadingAnalysis] = React.useState(true);
+
+  // ------------------------------------------------------------------
+  // Auth check + load any saved analysis from user_preferences
+  // ------------------------------------------------------------------
   React.useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) {
         router.replace("/login");
-      } else {
-        setUserId(user.id);
+        return;
+      }
+      setUserId(user.id);
+
+      try {
+        const { data } = await supabase
+          .from("user_preferences")
+          .select("historical_deficiencies")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (data?.historical_deficiencies) {
+          const parsed: RoutineAnalysis = JSON.parse(data.historical_deficiencies);
+          if (parsed.lacking || parsed.excess || parsed.summary) {
+            setAnalysis(parsed);
+            setShowTextarea(false);
+          }
+        }
+      } catch {
+        // No saved analysis – show the input form
+      } finally {
+        setLoadingAnalysis(false);
       }
     });
   }, [router]);
 
+  // ------------------------------------------------------------------
+  // Analyze routine handler
+  // ------------------------------------------------------------------
+  const handleAnalyze = async () => {
+    if (!routineText.trim() || !userId) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await fetchAPI<RoutineAnalysis>("/api/user/analyze-routine", {
+        method: "POST",
+        body: { user_id: userId, routine_description: routineText.trim() },
+      });
+      setAnalysis(result);
+      setShowTextarea(false);
+      toast.success("Analysis complete!");
+    } catch {
+      toast.error("Analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-linear-to-b from-background via-background to-muted/40">
       <div className="container mx-auto px-4 py-8 md:py-10">
@@ -237,95 +313,78 @@ export default function DashboardPage() {
         <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-              Today&apos;s Overview
+              My Dashboard
             </h1>
             <p className="mt-1 text-sm text-muted-foreground md:text-base">
-              Your health, macros, and budget at a glance.
+              Understand your baseline diet and get personalized meal picks.
             </p>
           </div>
-
-          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <Button
-              size="lg"
-              className="w-full sm:w-auto"
-              onClick={() => router.push("/menu-upload")}
-            >
-              Upload Menu
-            </Button>
-          </div>
+          <Button
+            size="lg"
+            className="w-full sm:w-auto"
+            onClick={() => router.push("/menu-upload")}
+          >
+            Upload Menu
+          </Button>
         </header>
 
         {/* Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-[2fr,1.5fr]">
-          {/* Left column: Macros + Insights + Menus */}
+          {/* Left column */}
           <div className="space-y-6">
-            {/* Macro Tracker */}
+            {/* Baseline Diet Analysis card */}
             <Card className="border-border/60 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <div>
-                  <CardTitle>Macro Tracker</CardTitle>
-                  <CardDescription>
-                    How today compares to your personalized targets.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  Daily
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <MacroRow
-                  label="Calories"
-                  unit="kcal"
-                  color="bg-primary"
-                  consumed={macros.calories.consumed}
-                  target={macros.calories.target}
-                />
-                <MacroRow
-                  label="Protein"
-                  unit="g"
-                  color="bg-emerald-500"
-                  consumed={macros.protein.consumed}
-                  target={macros.protein.target}
-                />
-                <MacroRow
-                  label="Carbs"
-                  unit="g"
-                  color="bg-sky-500"
-                  consumed={macros.carbs.consumed}
-                  target={macros.carbs.target}
-                />
-                <MacroRow
-                  label="Fats"
-                  unit="g"
-                  color="bg-amber-500"
-                  consumed={macros.fats.consumed}
-                  target={macros.fats.target}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Historical Insights */}
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle>Historical Insights</CardTitle>
+              <CardHeader className="pb-4">
+                <CardTitle>Baseline Diet Analysis</CardTitle>
                 <CardDescription>
-                  AI-powered patterns from your past logs.
+                  Tell us what you typically eat and our AI nutritionist will
+                  identify what your routine is missing or overdoing.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {mockInsights.map((insight) => (
-                  <div
-                    key={insight.id}
-                    className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
-                  >
-                    <span className="font-medium text-foreground">Insight:</span>{" "}
-                    {insight.text}
+              <CardContent>
+                {loadingAnalysis ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-4 w-2/3" />
                   </div>
-                ))}
+                ) : showTextarea ? (
+                  <div className="space-y-4">
+                    <Textarea
+                      value={routineText}
+                      onChange={(e) => setRoutineText(e.target.value)}
+                      rows={6}
+                      placeholder="Describe what you typically eat in a day (e.g., 'Breakfast: 3 eggs and toast. Lunch: Chicken wrap. Dinner: Pasta and a salad. Snacks: A protein bar...')."
+                      disabled={isAnalyzing}
+                    />
+                    <Button
+                      onClick={handleAnalyze}
+                      disabled={isAnalyzing || !routineText.trim()}
+                      className="w-full sm:w-auto"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Analyzing
+                        </>
+                      ) : (
+                        " Analyze My Routine Diet"
+                      )}
+                    </Button>
+                  </div>
+                ) : analysis ? (
+                  <AnalysisResults
+                    analysis={analysis}
+                    onUpdate={() => {
+                      setShowTextarea(true);
+                      setRoutineText("");
+                    }}
+                  />
+                ) : null}
               </CardContent>
             </Card>
 
-            {/* Past Menus */}
+            {/* Your Menus card */}
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle>Your Menus</CardTitle>
@@ -347,58 +406,46 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Right column: Budget + extras */}
+          {/* Right column */}
           <div className="space-y-6">
-            {/* Budget Tracker */}
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle>Budget Tracker</CardTitle>
-                <CardDescription>
-                  Keep your wallet aligned with your health goals.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Spent Today</span>
-                  <span className="font-semibold">
-                    ${budget.spentToday.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Remaining Budget
-                  </span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    ${budget.remainingBudget.toFixed(2)}
-                  </span>
-                </div>
-                <div className="pt-1 text-xs text-muted-foreground">
-                  Stay within budget to maximize consistency and reduce friction
-                  around food decisions.
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Next Steps */}
             <Card className="border-border/60 bg-linear-to-br from-primary/5 via-background to-muted/40 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle>Next Steps</CardTitle>
-                <CardDescription>
-                  Soon you&apos;ll see AI-powered meal suggestions here.
-                </CardDescription>
+                <CardTitle>How It Works</CardTitle>
+                <CardDescription>Three steps to smarter eating.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  Once you upload a menu, OptiMeal will analyze your{" "}
-                  <span className="font-medium text-foreground">
-                    macros, budget, and preferences
-                  </span>{" "}
-                  to recommend the best options available right now.
-                </p>
+              <CardContent className="space-y-4 text-sm text-muted-foreground">
+                <div className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    1
+                  </span>
+                  <p>
+                    <span className="font-medium text-foreground">Describe your routine</span> —
+                    Tell us what a typical day of eating looks like for you.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    2
+                  </span>
+                  <p>
+                    <span className="font-medium text-foreground">Get your analysis</span> —
+                    Our AI nutritionist pinpoints gaps and excesses based on your goals.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    3
+                  </span>
+                  <p>
+                    <span className="font-medium text-foreground">Upload a menu</span> —
+                    OptiMeal recommends the best meal combos from any restaurant menu
+                    to fix your gaps in real time.
+                  </p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-1"
+                  className="mt-1 w-full"
                   onClick={() => router.push("/menu-upload")}
                 >
                   Upload a menu to get started
@@ -407,42 +454,6 @@ export default function DashboardPage() {
             </Card>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-interface MacroRowProps {
-  label: string;
-  unit: string;
-  consumed: number;
-  target: number;
-  color: string;
-}
-
-function MacroRow({ label, unit, consumed, target, color }: MacroRowProps) {
-  const percent = target > 0 ? Math.min(100, (consumed / target) * 100) : 0;
-  const rounded = Math.round(percent);
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{label}</span>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-            {rounded}% of target
-          </span>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {consumed} / {target} {unit}
-        </span>
-      </div>
-      <div className="relative">
-        <Progress value={rounded} className="h-2 overflow-hidden bg-muted" />
-        <div
-          className={`pointer-events-none absolute inset-y-0 left-0 rounded-full ${color}`}
-          style={{ width: `${rounded}%` }}
-        />
       </div>
     </div>
   );

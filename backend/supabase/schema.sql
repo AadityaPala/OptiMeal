@@ -117,17 +117,25 @@ CREATE TABLE IF NOT EXISTS public.daily_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   log_date DATE NOT NULL,
-  total_spent NUMERIC(10,2) CHECK (total_spent >= 0),
+  -- meals stores per-item tracking: [{"item_name": "Pancake", "price": 45}]
+  meals JSONB NOT NULL DEFAULT '[]'::JSONB,
+  -- daily_total_cost is kept in sync by the API (sum of all meal prices)
+  daily_total_cost NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (daily_total_cost >= 0),
+  -- legacy nutrition columns (retained for future use)
   total_calories INTEGER CHECK (total_calories >= 0),
   total_protein_g NUMERIC(6,2) CHECK (total_protein_g >= 0),
   total_carbs_g NUMERIC(6,2) CHECK (total_carbs_g >= 0),
   total_fats_g NUMERIC(6,2) CHECK (total_fats_g >= 0),
-  is_imported_history BOOLEAN NOT NULL DEFAULT FALSE,
-  user_rating SMALLINT CHECK (user_rating BETWEEN 1 AND 5),
   created_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc', NOW()),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc', NOW()),
   CONSTRAINT uq_daily_logs_user_date UNIQUE (user_id, log_date)
 );
+
+-- Migration: run this if daily_logs already exists in your database
+-- ALTER TABLE public.daily_logs
+--   ADD COLUMN IF NOT EXISTS meals JSONB NOT NULL DEFAULT '[]'::JSONB,
+--   ADD COLUMN IF NOT EXISTS daily_total_cost NUMERIC(10,2) NOT NULL DEFAULT 0
+--     CHECK (daily_total_cost >= 0);
 
 CREATE INDEX idx_daily_logs_user_id ON public.daily_logs(user_id);
 

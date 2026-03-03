@@ -38,6 +38,13 @@ export default function LoginPage() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+    // Auto-redirect already-authenticated users straight to the dashboard.
+    React.useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) router.replace("/dashboard");
+        });
+    }, [router]);
+
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: { email: "", password: "" },

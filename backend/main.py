@@ -8,6 +8,8 @@ from routes.menu import router as menu_router
 from routes.profile import router as profile_router
 from routes.recommendations import router as recommendations_router
 from routes.auth import router as auth_router
+from routes.user import router as user_router
+from routes.logs import router as logs_router
 
 
 def create_app() -> FastAPI:
@@ -41,6 +43,8 @@ def create_app() -> FastAPI:
   app.include_router(recommendations_router)
   app.include_router(menu_router)
   app.include_router(profile_router)
+  app.include_router(user_router)
+  app.include_router(logs_router)
 
   @app.get("/health", tags=["system"])
   async def health_check() -> dict[str, str]:
