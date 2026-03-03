@@ -12,6 +12,7 @@ from routes.auth import router as auth_router
 from routes.user import router as user_router
 from routes.logs import router as logs_router
 from routes.analytics import router as analytics_router
+from routes.import_export import router as import_export_router
 
 
 def create_app() -> FastAPI:
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
   app.include_router(user_router)
   app.include_router(logs_router)
   app.include_router(analytics_router)
+  app.include_router(import_export_router)
 
   @app.get("/health", tags=["system"])
   async def health_check() -> dict[str, str]:

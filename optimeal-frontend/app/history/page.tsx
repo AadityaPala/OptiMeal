@@ -5,10 +5,10 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, Plus } from "lucide-react";
+import { CalendarDays, Plus, Download, FileInput } from "lucide-react";
 import { format } from "date-fns";
 
-import { fetchAPI } from "@/lib/api";
+import { fetchAPI, API_BASE_URL } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -71,6 +72,109 @@ interface MonthData {
 
 // hierarchy[year][month] = MonthData
 type LogHierarchy = Record<string, Record<string, MonthData>>;
+
+// ---------------------------------------------------------------------------
+// Bulk Import Dialog
+// ---------------------------------------------------------------------------
+function BulkImportDialog({
+  userId,
+  onSuccess,
+}: {
+  userId: string;
+  onSuccess: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [rawText, setRawText] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const reset = () => setRawText("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rawText.trim()) return;
+    setSubmitting(true);
+    try {
+      const result = await fetchAPI<{ message: string; imported_days: number; imported_items: number }>(
+        "/api/logs/bulk-import",
+        { method: "POST", body: { user_id: userId, raw_text: rawText.trim() } }
+      );
+      toast.success(result.message);
+      setOpen(false);
+      reset();
+      onSuccess();
+    } catch {
+      toast.error("Bulk import failed. Please check your format and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="secondary">
+          <FileInput className="mr-2 h-4 w-4" />
+          Bulk Import
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Bulk Import from Notes</DialogTitle>
+          <DialogDescription>
+            Paste your plain-text diary below. Each date header (e.g.{" "}
+            <code className="rounded bg-muted px-1 text-xs">2025/11/01 : Saturday</code>)
+            followed by item lines like{" "}
+            <code className="rounded bg-muted px-1 text-xs">Mini thali : 70</code>{" "}
+            will be parsed and saved automatically.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          <Textarea
+            value={rawText}
+            onChange={(e) => setRawText(e.target.value)}
+            rows={14}
+            placeholder={`2025/11/01 : Saturday\nMini thali : 70(L)\nRajma + Jeera rice : 100(L)\n\n2025/11/02 : Sunday\nPancake : 45`}
+            className="font-mono text-xs"
+            disabled={submitting}
+          />
+          <DialogFooter>
+            <Button
+              type="submit"
+              disabled={submitting || !rawText.trim()}
+              className="w-full"
+            >
+              {submitting ? "Importing…" : "Import"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Download CSV Button
+// ---------------------------------------------------------------------------
+function DownloadCsvButton({ userId }: { userId: string }) {
+  const handleDownload = () => {
+    const url = `${API_BASE_URL}/api/logs/export/${userId}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "optimeal_report.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  return (
+    <Button variant="outline" onClick={handleDownload}>
+      <Download className="mr-2 h-4 w-4" />
+      Download CSV
+    </Button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Add Expense Dialog
@@ -281,7 +385,11 @@ export default function HistoryPage() {
                 Your complete food diary and monthly expenditure.
               </p>
             </div>
-            {userId && <AddExpenseDialog userId={userId} onSuccess={handleExpenseAdded} />}
+            <div className="flex flex-wrap gap-2">
+              {userId && <BulkImportDialog userId={userId} onSuccess={handleExpenseAdded} />}
+              {userId && <AddExpenseDialog userId={userId} onSuccess={handleExpenseAdded} />}
+              {userId && <DownloadCsvButton userId={userId} />}
+            </div>
           </header>
           <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
             <CalendarDays className="mb-4 h-14 w-14 text-muted-foreground/50" />
@@ -313,7 +421,11 @@ export default function HistoryPage() {
               Your complete food diary and monthly expenditure at a glance.
             </p>
           </div>
-          {userId && <AddExpenseDialog userId={userId} onSuccess={handleExpenseAdded} />}
+          <div className="flex flex-wrap gap-2">
+            {userId && <BulkImportDialog userId={userId} onSuccess={handleExpenseAdded} />}
+            {userId && <AddExpenseDialog userId={userId} onSuccess={handleExpenseAdded} />}
+            {userId && <DownloadCsvButton userId={userId} />}
+          </div>
         </header>
 
         {/* Year Tabs */}
