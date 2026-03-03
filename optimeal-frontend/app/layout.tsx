@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
@@ -20,6 +20,26 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "OptiMeal",
   description: "Personalized health & budget tracker.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "OptiMeal",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    apple: "/icons/icon-192x192.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({

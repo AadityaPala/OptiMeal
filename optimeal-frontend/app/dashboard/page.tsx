@@ -30,6 +30,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  MonthlySpendingChart,
+  type MonthlySpendingPoint,
+} from "@/components/analytics/MonthlySpendingChart";
+import {
+  TopItemsList,
+  type TopItem,
+} from "@/components/analytics/TopItemsList";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +54,73 @@ interface RoutineAnalysis {
   lacking: string[];
   excess: string[];
   summary: string;
+}
+
+// ---------------------------------------------------------------------------
+// Trends section
+// ---------------------------------------------------------------------------
+function TrendsSection({ userId, currency }: { userId: string; currency: string }) {
+  const currentYear = new Date().getFullYear();
+
+  const [spending, setSpending] = React.useState<MonthlySpendingPoint[]>([]);
+  const [topItems, setTopItems] = React.useState<TopItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    Promise.all([
+      fetchAPI<MonthlySpendingPoint[]>(
+        `/api/analytics/spending/${userId}?year=${currentYear}`
+      ),
+      fetchAPI<TopItem[]>(`/api/analytics/top-items/${userId}`),
+    ])
+      .then(([spendingData, topData]) => {
+        setSpending(spendingData);
+        setTopItems(topData);
+      })
+      .catch(() => toast.error("Could not load analytics data."))
+      .finally(() => setLoading(false));
+  }, [userId, currentYear]);
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-4 text-xl font-semibold tracking-tight">Your Trends</h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Monthly Spending */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Monthly Spending</CardTitle>
+            <CardDescription>{currentYear} overview</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-52 w-full rounded-md" />
+            ) : (
+              <MonthlySpendingChart data={spending} currency={currency} />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Items */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Top Items</CardTitle>
+            <CardDescription>Most ordered in the last 30 days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <TopItemsList items={topItems} currency={currency} />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +316,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [userId, setUserId] = React.useState<string | null>(null);
+  const [currency, setCurrency] = React.useState("USD");
 
   // Routine analysis state
   const [routineText, setRoutineText] = React.useState("");
@@ -259,6 +335,18 @@ export default function DashboardPage() {
         return;
       }
       setUserId(user.id);
+
+      // Load preferred currency from profile
+      supabase
+        .from("user_profiles")
+        .select("preferred_currency")
+        .eq("user_id", user.id)
+        .maybeSingle()
+        .then(({ data: profileData }) => {
+          if (profileData?.preferred_currency) {
+            setCurrency(profileData.preferred_currency);
+          }
+        });
 
       try {
         const { data } = await supabase
@@ -327,6 +415,9 @@ export default function DashboardPage() {
             Upload Menu
           </Button>
         </header>
+
+        {/* Trends */}
+        {userId && <TrendsSection userId={userId} currency={currency} />}
 
         {/* Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-[2fr,1.5fr]">

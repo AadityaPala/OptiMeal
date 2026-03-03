@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from routes.recommendations import router as recommendations_router
 from routes.auth import router as auth_router
 from routes.user import router as user_router
 from routes.logs import router as logs_router
+from routes.analytics import router as analytics_router
 
 
 def create_app() -> FastAPI:
@@ -22,13 +24,22 @@ def create_app() -> FastAPI:
       description="Backend service for the OptiMeal health & budget tracker.",
   )
 
-  # CORS configuration for local Next.js (and future mobile dev)
-  origins = [
+  # CORS configuration
+  # In production, set FRONTEND_URL to your Vercel deployment URL, e.g.
+  # https://optimeal.vercel.app. Multiple origins can be comma-separated via
+  # EXTRA_CORS_ORIGINS (e.g. "https://preview.optimeal.vercel.app,https://optimeal.com").
+  _frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+  _extra_raw = os.getenv("EXTRA_CORS_ORIGINS", "")
+  _extra = [o.strip().rstrip("/") for o in _extra_raw.split(",") if o.strip()]
+
+  origins = list({
+      _frontend_url,
       "http://localhost:3000",
       "http://127.0.0.1:3000",
       "http://localhost:19006",   # Expo web (optional)
       "http://127.0.0.1:19006",
-    ]
+      *_extra,
+  })
 
   app.add_middleware(
       CORSMiddleware,
@@ -45,6 +56,7 @@ def create_app() -> FastAPI:
   app.include_router(profile_router)
   app.include_router(user_router)
   app.include_router(logs_router)
+  app.include_router(analytics_router)
 
   @app.get("/health", tags=["system"])
   async def health_check() -> dict[str, str]:

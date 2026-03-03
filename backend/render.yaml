@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: optimeal-api
+    runtime: python
+    region: oregon          # change to the region closest to your users
+    plan: free              # upgrade to "starter" for always-on
+    rootDir: .              # relative to repo root; adjust if monorepo layout differs
+
+    buildCommand: pip install -r requirements.txt
+
+    # Render injects $PORT automatically; the || fallback is for local testing.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}
+
+    healthCheckPath: /health
+
+    envVars:
+      # Set these in the Render dashboard → Environment tab (never commit real values).
+      - key: FRONTEND_URL
+        sync: false         # Render will prompt you to fill this in
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Optional: comma-separated list of additional allowed origins
+      - key: EXTRA_CORS_ORIGINS
+        value: ""
