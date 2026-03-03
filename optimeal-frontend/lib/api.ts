@@ -1,17 +1,11 @@
 // lib/api.ts
 const DEFAULT_DEV_API_BASE_URL = "http://localhost:8000";
 
-const resolvedApiBaseUrl =
+// Resolved at module load — may be undefined during Next.js SSG build passes.
+// The actual guard runs lazily inside fetchAPI so the build never throws here.
+export const API_BASE_URL: string =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  (process.env.NODE_ENV === "development" ? DEFAULT_DEV_API_BASE_URL : undefined);
-
-if (!resolvedApiBaseUrl) {
-  throw new Error(
-    "NEXT_PUBLIC_API_BASE_URL is not set. Configure it in your environment for non-development builds."
-  );
-}
-
-export const API_BASE_URL = resolvedApiBaseUrl;
+  (process.env.NODE_ENV === "production" ? "" : DEFAULT_DEV_API_BASE_URL);
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -31,7 +25,13 @@ export async function fetchAPI<TResponse = unknown, TBody = unknown>(
   path: string,
   options: FetchAPIOptions<TBody> = {}
 ): Promise<TResponse> {
-  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const base = API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!base) {
+    throw new Error(
+      "NEXT_PUBLIC_API_BASE_URL is not set. Add it to your Vercel environment variables."
+    );
+  }
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
 
   const { method = "GET", body, headers, noJson } = options;
 
